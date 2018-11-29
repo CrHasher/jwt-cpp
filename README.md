@@ -21,41 +21,33 @@ For the sake of completeness, here is a list of all supported algorithms:
 * PS512
 
 ## Examples
-Simple example of decoding a token and printing all claims:
+Simple example of decoding a token:
 ```c++
 #include <jwt-cpp/jwt.h>
 #include <iostream>
 
 int main(int argc, const char** argv) {
-	std::string token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXUyJ9.eyJpc3MiOiJhdXRoMCJ9.AbIJTDMFc7yUa5MhvcP03nJPyCPzZtQcGEp-zWfOkEE";
-	auto decoded = jwt::decode(token);
-
-	for(auto& e : decoded.get_payload_claims())
-		std::cout << e.first << " = " << e.second.to_json() << std::endl;
+	//...
+	std::string nsaID;
+	jwt::decoded_jwt decodedNsaIDToken = jwt::decode(nsaIDToken, false);
+	if (decodedNsaIDToken.error() == jwt::JwtErrc::NoError)
+	{
+		if (decodedNsaIDToken.has_payload_claim("sub"))
+		{
+			jwt::result_t<const jwt::claim&> sub = decodedNsaIDToken.get_payload_claim("sub");
+			if (sub.second == jwt::JwtErrc::NoError)
+			{
+				jwt::result_t<std::string> subStr = sub.first.as_string();
+				if (subStr.second == jwt::JwtErrc::NoError)
+				{
+					nsaID = subStr.first;
+				}
+			}
+		}
+	}
+	//...
 }
 ```
-
-In order to verify a token you first build a verifier and use it to verify a decoded token.
-```c++
-auto verifier = jwt::verify()
-	.allow_algorithm(jwt::algorithm::hs256{ "secret" })
-	.with_issuer("auth0");
-
-verifier.verify(decoded_token);
-```
-The created verifier is stateless so you can reuse it for different tokens.
-
-Creating a token (and signing) is equally easy.
-```c++
-auto token = jwt::create()
-	.set_issuer("auth0")
-	.set_type("JWS")
-	.set_payload_claim("sample", std::string("test"))
-	.sign(jwt::algorithm::hs256{"secret"});
-```
-
-## Contributing
-If you have an improvement or found a bug feel free to [open an issue](https://github.com/Thalhammer/jwt-cpp/issues/new) or add the change and create a pull request. If you file a bug please make sure to include as much information about your environment (compiler version, etc.) as possible to help reproduce the issue. If you add a new feature please make sure to also include test cases for it.
 
 ## Dependencies
 In order to use jwt-cpp you need the following tools.
@@ -63,17 +55,3 @@ In order to use jwt-cpp you need the following tools.
 * a compiler supporting at least c++11
 * basic stl support
 
-In order to build the test cases you also need
-* gtest installed in linker path
-* pthread
-
-## Troubleshooting
-#### Missing _HMAC amd _EVP_sha256 symbols on Mac
-There seems to exists a problem with the included openssl library of MacOS. Make sure you link to one provided by brew.
-See [here](https://github.com/Thalhammer/jwt-cpp/issues/6) for more details.
-#### Building on windows fails with syntax errors
-The header "Windows.h", which is often included in windowsprojects, defines macros for MIN and MAX which screw up std::numeric_limits.
-See [here](https://github.com/Thalhammer/jwt-cpp/issues/5) for more details. To fix this do one of the following things:
-* define NOMINMAX, which suppresses this behaviour
-* include this library before you include windows.h
-* place ```#undef max``` and ```#undef min``` before you include this library
