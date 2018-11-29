@@ -37,7 +37,7 @@
 #include <iterator>
 #include <limits>
 #include <map>
-#include <stdexcept>
+#include <cassert>
 #include <string>
 #include <vector>
 #include <utility>
@@ -86,7 +86,7 @@ extern "C" {
 #define PICOJSON_ASSERT(e)                                                                                                         \
   do {                                                                                                                             \
     if (!(e))                                                                                                                      \
-      throw std::runtime_error(#e);                                                                                                \
+      assert(0);                                                                                                                   \
   } while (0)
 #endif
 
@@ -237,7 +237,7 @@ inline value::value(double n) : type_(number_type), u_() {
       isnan(n) || isinf(n)
 #endif
           ) {
-    throw std::overflow_error("");
+    assert(0);
   }
   u_.number_ = n;
 }

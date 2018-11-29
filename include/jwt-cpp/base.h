@@ -1,4 +1,5 @@
 #pragma once
+#include "errors.h"
 #include <string>
 #include <array>
 
@@ -37,18 +38,18 @@ namespace jwt {
 	class base {
 	public:
 		template<typename T>
-		static std::string encode(const std::string& bin) {
+		static result_t<std::string> encode(const std::string& bin) {
 			return encode(bin, T::data(), T::fill());
 		}
 		template<typename T>
-		static std::string decode(const std::string& base) {
+		static result_t<std::string> decode(const std::string& base) {
 			return decode(base, T::data(), T::fill());
 		}
 
 	private:
-		static std::string encode(const std::string& bin, const std::array<char, 64>& alphabet, const std::string& fill) {
+		static result_t<std::string> encode(const std::string& bin, const std::array<char, 64>& alphabet, const std::string& fill) {
+			result_t<std::string> res;
 			size_t size = bin.size();
-			std::string res;
 
 			// clear incomplete bytes
 			size_t fast_size = size - size % 3;
@@ -59,10 +60,10 @@ namespace jwt {
 
 				uint32_t triple = (octet_a << 0x10) + (octet_b << 0x08) + octet_c;
 
-				res += alphabet[(triple >> 3 * 6) & 0x3F];
-				res += alphabet[(triple >> 2 * 6) & 0x3F];
-				res += alphabet[(triple >> 1 * 6) & 0x3F];
-				res += alphabet[(triple >> 0 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 3 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 2 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 1 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 0 * 6) & 0x3F];
 			}
 
 			if (fast_size == size)
@@ -78,16 +79,16 @@ namespace jwt {
 
 			switch (mod) {
 			case 1:
-				res += alphabet[(triple >> 3 * 6) & 0x3F];
-				res += alphabet[(triple >> 2 * 6) & 0x3F];
-				res += fill;
-				res += fill;
+				res.first += alphabet[(triple >> 3 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 2 * 6) & 0x3F];
+				res.first += fill;
+				res.first += fill;
 				break;
 			case 2:
-				res += alphabet[(triple >> 3 * 6) & 0x3F];
-				res += alphabet[(triple >> 2 * 6) & 0x3F];
-				res += alphabet[(triple >> 1 * 6) & 0x3F];
-				res += fill;
+				res.first += alphabet[(triple >> 3 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 2 * 6) & 0x3F];
+				res.first += alphabet[(triple >> 1 * 6) & 0x3F];
+				res.first += fill;
 				break;
 			default:
 				break;
@@ -96,7 +97,8 @@ namespace jwt {
 			return res;
 		}
 
-		static std::string decode(const std::string& base, const std::array<char, 64>& alphabet, const std::string& fill) {
+		static result_t<std::string> decode(const std::string& base, const std::array<char, 64>& alphabet, const std::string& fill) {
+			result_t<std::string> res;
 			size_t size = base.size();
 
 			size_t fill_cnt = 0;
@@ -104,62 +106,100 @@ namespace jwt {
 				if (base.substr(size - fill.size(), fill.size()) == fill) {
 					fill_cnt++;
 					size -= fill.size();
-					if(fill_cnt > 2)
-						throw std::runtime_error("Invalid input");
+					if (fill_cnt > 2)
+					{
+						res.second = JwtErrc::InvalidInputError;
+						return res;
+					}
 				}
 				else break;
 			}
 
 			if ((size + fill_cnt) % 4 != 0)
-				throw std::runtime_error("Invalid input");
+			{
+				res.second = JwtErrc::InvalidInputError;
+				return res;
+			}
 
 			size_t out_size = size / 4 * 3;
-			std::string res;
-			res.reserve(out_size);
+			res.first.reserve(out_size);
 
 			auto get_sextet = [&](size_t offset) {
+				result_t<size_t> res;
 				for (size_t i = 0; i < alphabet.size(); i++) {
 					if (alphabet[i] == base[offset])
-						return i;
+					{
+						res.first = i;
+						return res;
+					}
 				}
-				throw std::runtime_error("Invalid input");
+				res.second = JwtErrc::InvalidInputError;
+				return res;
 			};
 
 			
 			size_t fast_size = size - size % 4;
 			for (size_t i = 0; i < fast_size;) {
-				uint32_t sextet_a = get_sextet(i++);
-				uint32_t sextet_b = get_sextet(i++);
-				uint32_t sextet_c = get_sextet(i++);
-				uint32_t sextet_d = get_sextet(i++);
+				result_t<uint32_t> sextet_a = get_sextet(i++);
+				result_t<uint32_t> sextet_b = get_sextet(i++);
+				result_t<uint32_t> sextet_c = get_sextet(i++);
+				result_t<uint32_t> sextet_d = get_sextet(i++);
 
-				uint32_t triple = (sextet_a << 3 * 6)
-					+ (sextet_b << 2 * 6)
-					+ (sextet_c << 1 * 6)
-					+ (sextet_d << 0 * 6);
+				if (sextet_a.second != JwtErrc::NoError || sextet_b.second != JwtErrc::NoError ||
+				    sextet_c.second != JwtErrc::NoError || sextet_d.second != JwtErrc::NoError)
+				{
+					res.second = JwtErrc::InvalidInputError;
+					return res;
+				}
 
-				res += (triple >> 2 * 8) & 0xFF;
-				res += (triple >> 1 * 8) & 0xFF;
-				res += (triple >> 0 * 8) & 0xFF;
+				uint32_t triple = (sextet_a.first << 3 * 6)
+					+ (sextet_b.first << 2 * 6)
+					+ (sextet_c.first << 1 * 6)
+					+ (sextet_d.first << 0 * 6);
+
+				res.first += (triple >> 2 * 8) & 0xFF;
+				res.first += (triple >> 1 * 8) & 0xFF;
+				res.first += (triple >> 0 * 8) & 0xFF;
 			}
 
 			if (fill_cnt == 0)
 				return res;
 
-			uint32_t triple = (get_sextet(fast_size) << 3 * 6)
-				+ (get_sextet(fast_size + 1) << 2 * 6);
+			result_t<size_t> st1 = get_sextet(fast_size);
+			if (st1.second != JwtErrc::NoError)
+			{
+				res.second = st1.second;
+				return res;
+			}
 
-			switch (fill_cnt) {
-			case 1:
-				triple |= (get_sextet(fast_size + 2) << 1 * 6);
-				res += (triple >> 2 * 8) & 0xFF;
-				res += (triple >> 1 * 8) & 0xFF;
-				break;
-			case 2:
-				res += (triple >> 2 * 8) & 0xFF;
-				break;
-			default:
-				break;
+			result_t<size_t> st2 = get_sextet(fast_size + 1);
+			if (st2.second != JwtErrc::NoError)
+			{
+				res.second = st2.second;
+				return res;
+			}
+
+			result_t<size_t> st3 = get_sextet(fast_size + 2);
+			if (st3.second != JwtErrc::NoError)
+			{
+				res.second = st3.second;
+				return res;
+			}
+
+			uint32_t triple = (st1.first << 3 * 6) + (st2.first << 2 * 6);
+
+			switch (fill_cnt)
+			{
+				case 1:
+					triple |= (st3.first << 1 * 6);
+					res.first += (triple >> 2 * 8) & 0xFF;
+					res.first += (triple >> 1 * 8) & 0xFF;
+					break;
+				case 2:
+					res.first += (triple >> 2 * 8) & 0xFF;
+					break;
+				default:
+					break;
 			}
 
 			return res;
