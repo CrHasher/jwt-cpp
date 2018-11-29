@@ -857,6 +857,12 @@ namespace jwt
 				return {false, JwtErrc::BadCastError};
 			return {val.get<bool>(), JwtErrc::NoError};
 		}
+		result_t<const picojson::object&> as_object() const
+		{
+			if (!val.is<picojson::object>())
+				return {picojson::object(), JwtErrc::BadCastError};
+			return {val.get<picojson::object>(), JwtErrc::NoError};
+		}
 	};
 
 	class payload
