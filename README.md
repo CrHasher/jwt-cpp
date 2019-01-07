@@ -1,4 +1,4 @@
-# jwt-cpp
+# jwt-cpp-noexcept
 
 An exception free header only library for creating and validating json web tokens in c++.
 
