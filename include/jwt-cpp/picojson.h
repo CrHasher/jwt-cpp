@@ -160,10 +160,10 @@ public:
   value(const value &x);
   value &operator=(const value &x);
 #if PICOJSON_USE_RVALUE_REFERENCE
-  value(value &&x) throw();
-  value &operator=(value &&x) throw();
+  value(value &&x) noexcept;
+  value &operator=(value &&x) noexcept;
 #endif
-  void swap(value &x) throw();
+  void swap(value &x) noexcept;
   template <typename T> bool is() const;
   template <typename T> const T &get() const;
   template <typename T> T &get();
@@ -231,7 +231,7 @@ inline value::value(double n) : type_(number_type), u_() {
   if (
 #ifdef _MSC_VER
       !_finite(n)
-#elif __cplusplus >= 201103L || !(defined(isnan) && defined(isinf))
+#elif __cplusplus >= 201103L
       std::isnan(n) || std::isinf(n)
 #else
       isnan(n) || isinf(n)
@@ -320,15 +320,15 @@ inline value &value::operator=(const value &x) {
 }
 
 #if PICOJSON_USE_RVALUE_REFERENCE
-inline value::value(value &&x) throw() : type_(null_type), u_() {
+inline value::value(value &&x) noexcept : type_(null_type), u_() {
   swap(x);
 }
-inline value &value::operator=(value &&x) throw() {
+inline value &value::operator=(value &&x) noexcept {
   swap(x);
   return *this;
 }
 #endif
-inline void value::swap(value &x) throw() {
+inline void value::swap(value &x) noexcept {
   std::swap(type_, x.type_);
   std::swap(u_, x.u_);
 }

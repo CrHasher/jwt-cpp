@@ -20,18 +20,29 @@
 #define OPENSSL10
 #endif
 
+#ifndef JWT_CLAIM_EXPLICIT
+#define JWT_CLAIM_EXPLICIT 0
+#endif
+
 namespace jwt
 {
 	using date = std::chrono::system_clock::time_point;
 
 	namespace algorithm
 	{
+		/**
+		 * "none" algorithm.
+		 *
+		 * Returns and empty signature and checks if the given signature is empty.
+		 */
 		struct none
 		{
+			/// Return an empty string
 			result_t<std::string> sign(const std::string&) const
 			{
 				return {"", JwtErrc::NoError};
 			}
+			/// Check if the given signature is empty. JWT's with "none" algorithm should not contain a signature.
 			JwtErrc verify(const std::string&, const std::string& signature) const
 			{
 				if (!signature.empty())
@@ -39,6 +50,7 @@ namespace jwt
 					return JwtErrc::SignatureVerificationError;
 				}
 			}
+			/// Get algorithm name
 			std::string name() const
 			{
 				return "none";
@@ -48,14 +60,28 @@ namespace jwt
 				return JwtErrc::NoError;
 			}
 		};
+		/**
+		 * Base class for HMAC family of algorithms
+		 */
 		struct hmacsha
 		{
+			/**
+			 * Construct new hmac algorithm
+			 * \param key Key to use for HMAC
+			 * \param md Pointer to hash function
+			 * \param name Name of the algorithm
+			 */
 			hmacsha(std::string key, const EVP_MD* (*md)(), const std::string& name)
 			    : secret(std::move(key))
 			    , md(md)
 			    , alg_name(name)
 			{
 			}
+			/**
+			 * Sign jwt data
+			 * \param data The data to sign
+			 * \return HMAC signature for the given data
+			 */
 			result_t<std::string> sign(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -70,6 +96,11 @@ namespace jwt
 				res.first.resize(len);
 				return res;
 			}
+			/**
+			 * Check if signature is valid
+			 * \param data The data to check signature against
+			 * \param signature Signature provided by the jwt
+			 */
 			JwtErrc verify(const std::string& data, const std::string& signature) const
 			{
 				auto res = sign(data);
@@ -87,6 +118,10 @@ namespace jwt
 					return JwtErrc::SignatureVerificationError;
 				return JwtErrc::NoError;
 			}
+			/**
+			 * Returns the algorithm name provided to the constructor
+			 * \return Algorithmname
+			 */
 			std::string name() const
 			{
 				return alg_name;
@@ -97,12 +132,27 @@ namespace jwt
 			}
 
 		private:
+			/// HMAC secrect
 			const std::string secret;
+			/// HMAC hash generator
 			const EVP_MD* (*md)();
+			/// Algorithmname
 			const std::string alg_name;
 		};
+		/**
+		 * Base class for RSA family of algorithms
+		 */
 		struct rsa
 		{
+			/**
+			 * Construct new rsa algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 * \param md Pointer to hash function
+			 * \param name Name of the algorithm
+			 */
 			rsa(const std::string& public_key,
 			    const std::string& private_key,
 			    const std::string& public_key_password,
@@ -159,6 +209,11 @@ namespace jwt
 					}
 				} while (0);
 			}
+			/**
+			 * Sign jwt data
+			 * \param data The data to sign
+			 * \return RSA signature for the given data
+			 */
 			result_t<std::string> sign(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -196,6 +251,11 @@ namespace jwt
 				res.first.resize(len);
 				return res;
 			}
+			/**
+			 * Check if signature is valid
+			 * \param data The data to check signature against
+			 * \param signature Signature provided by the jwt
+			 */
 			JwtErrc verify(const std::string& data, const std::string& signature) const
 			{
 #ifdef OPENSSL10
@@ -220,6 +280,10 @@ namespace jwt
 					return JwtErrc::SignatureVerificationError;
 				}
 			}
+			/**
+			 * Returns the algorithm name provided to the constructor
+			 * \return Algorithmname
+			 */
 			std::string name() const
 			{
 				return alg_name;
@@ -230,13 +294,27 @@ namespace jwt
 			}
 
 		private:
+			/// OpenSSL structure containing converted keys
 			std::shared_ptr<EVP_PKEY> pkey;
+			/// Hash generator
 			const EVP_MD* (*md)();
+			/// Algorithmname
 			const std::string alg_name;
+			/// Error code
 			JwtErrc construct_error_code;
 		};
+		/**
+		 * Base class for ECDSA family of algorithms
+		 */
 		struct ecdsa
 		{
+			/**
+			 * Construct new ecdsa algorithm
+			 * \param public_key ECDSA public key in PEM format
+			 * \param private_key ECDSA private key or empty string if not available. If empty, signing will always
+			 * fail. \param public_key_password Password to decrypt public key pem. \param privat_key_password Password
+			 * to decrypt private key pem. \param md Pointer to hash function \param name Name of the algorithm
+			 */
 			ecdsa(const std::string& public_key,
 			      const std::string& private_key,
 			      const std::string& public_key_password,
@@ -298,6 +376,11 @@ namespace jwt
 					}
 				} while (0);
 			}
+			/**
+			 * Sign jwt data
+			 * \param data The data to sign
+			 * \return ECDSA signature for the given data
+			 */
 			result_t<std::string> sign(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -345,6 +428,11 @@ namespace jwt
 				return res;
 #endif
 			}
+			/**
+			 * Check if signature is valid
+			 * \param data The data to check signature against
+			 * \param signature Signature provided by the jwt
+			 */
 			JwtErrc verify(const std::string& data, const std::string& signature) const
 			{
 				result_t<const std::string> hash = generate_hash(data);
@@ -378,6 +466,10 @@ namespace jwt
 					return JwtErrc::SignatureInvalidError;
 #endif
 			}
+			/**
+			 * Returns the algorithm name provided to the constructor
+			 * \return Algorithmname
+			 */
 			std::string name() const
 			{
 				return alg_name;
@@ -388,6 +480,11 @@ namespace jwt
 			}
 
 		private:
+			/**
+			 * Convert a OpenSSL BIGNUM to a std::string
+			 * \param bn BIGNUM to convert
+			 * \return bignum as string
+			 */
 #ifdef OPENSSL10
 			static result_t<std::string> bn2raw(BIGNUM* bn)
 #else
@@ -401,9 +498,14 @@ namespace jwt
 					return {res.first.substr(1), JwtErrc::NoError};
 				return res;
 			}
+			/**
+			 * Convert an std::string to a OpenSSL BIGNUM
+			 * \param raw String to convert
+			 * \return BIGNUM representation
+			 */
 			static result_t<std::unique_ptr<BIGNUM, decltype(&BN_free)>> raw2bn(const std::string& raw)
 			{
-				if (raw[0] >= 0x80)
+				if (static_cast<uint8_t>(raw[0]) >= 0x80)
 				{
 					std::string str(1, 0x00);
 					str += raw;
@@ -415,35 +517,12 @@ namespace jwt
 				            BN_bin2bn((const unsigned char*)raw.data(), raw.size(), nullptr), BN_free),
 				        JwtErrc::NoError};
 			}
-			static std::string raw2der(const std::string& raw)
-			{
-				std::string res(4, 0x00);
-				res[0] = 0x30;
-				res[2] = 0x02;
-				if (raw[0] & 0x80)
-				{
-					res[3] = (char)(raw.size() / 2 + 1);
-					res += '\0';
-				}
-				else
-				{
-					res[3] = (char)(raw.size() / 2);
-				}
-				res += raw.substr(0, raw.size() / 2);
-				if (raw[raw.size() / 2] & 0x80)
-				{
-					res += 0x02;
-					res += (char)(raw.size() / 2 + 1);
-					res += '\0';
-				}
-				else
-				{
-					res += (char)(raw.size() / 2);
-				}
-				res += raw.substr(raw.size() / 2);
-				res[1] = (char)(res.size() - 2);
-				return res;
-			}
+
+			/**
+			 * Hash the provided data using the hash function specified in constructor
+			 * \param data Data to hash
+			 * \return Hash of data
+			 */
 			result_t<std::string> generate_hash(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -474,14 +553,30 @@ namespace jwt
 				return res;
 			}
 
+			/// OpenSSL struct containing keys
 			std::shared_ptr<EC_KEY> pkey;
+			/// Hash generator function
 			const EVP_MD* (*md)();
+			/// Algorithmname
 			const std::string alg_name;
+			/// Error code
 			JwtErrc construct_error_code;
 		};
 
+		/**
+		 * Base class for PSS-RSA family of algorithms
+		 */
 		struct pss
 		{
+			/**
+			 * Construct new pss algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 * \param md Pointer to hash function
+			 * \param name Name of the algorithm
+			 */
 			pss(const std::string& public_key,
 			    const std::string& private_key,
 			    const std::string& public_key_password,
@@ -539,6 +634,11 @@ namespace jwt
 					}
 				} while (0);
 			}
+			/**
+			 * Sign jwt data
+			 * \param data The data to sign
+			 * \return ECDSA signature for the given data
+			 */
 			result_t<std::string> sign(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -567,6 +667,11 @@ namespace jwt
 				}
 				return res;
 			}
+			/**
+			 * Check if signature is valid
+			 * \param data The data to check signature against
+			 * \param signature Signature provided by the jwt
+			 */
 			JwtErrc verify(const std::string& data, const std::string& signature) const
 			{
 				result_t<std::string> hash = this->generate_hash(data);
@@ -588,6 +693,10 @@ namespace jwt
 					return JwtErrc::SignatureInvalidError;
 				}
 			}
+			/**
+			 * Returns the algorithm name provided to the constructor
+			 * \return Algorithmname
+			 */
 			std::string name() const
 			{
 				return alg_name;
@@ -598,6 +707,11 @@ namespace jwt
 			}
 
 		private:
+			/**
+			 * Hash the provided data using the hash function specified in constructor
+			 * \param data Data to hash
+			 * \return Hash of data
+			 */
 			result_t<std::string> generate_hash(const std::string& data) const
 			{
 				result_t<std::string> res;
@@ -628,35 +742,70 @@ namespace jwt
 				return res;
 			}
 
+			/// OpenSSL structure containing keys
 			std::shared_ptr<EVP_PKEY> pkey;
+			/// Hash generator function
 			const EVP_MD* (*md)();
+			/// Algorithmname
 			const std::string alg_name;
+			/// Error code
 			JwtErrc construct_error_code;
 		};
 
+		/**
+		 * HS256 algorithm
+		 */
 		struct hs256 : public hmacsha
 		{
-			hs256(std::string key)
+			/**
+			 * Construct new instance of algorithm
+			 * \param key HMAC signing key
+			 */
+			explicit hs256(std::string key)
 			    : hmacsha(std::move(key), EVP_sha256, "HS256")
 			{
 			}
 		};
+		/**
+		 * HS384 algorithm
+		 */
 		struct hs384 : public hmacsha
 		{
-			hs384(std::string key)
+			/**
+			 * Construct new instance of algorithm
+			 * \param key HMAC signing key
+			 */
+			explicit hs384(std::string key)
 			    : hmacsha(std::move(key), EVP_sha384, "HS384")
 			{
 			}
 		};
+		/**
+		 * HS512 algorithm
+		 */
 		struct hs512 : public hmacsha
 		{
-			hs512(std::string key)
+			/**
+			 * Construct new instance of algorithm
+			 * \param key HMAC signing key
+			 */
+			explicit hs512(std::string key)
 			    : hmacsha(std::move(key), EVP_sha512, "HS512")
 			{
 			}
 		};
+		/**
+		 * RS256 algorithm
+		 */
 		struct rs256 : public rsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			rs256(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -665,8 +814,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * RS384 algorithm
+		 */
 		struct rs384 : public rsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			rs384(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -675,8 +834,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * RS512 algorithm
+		 */
 		struct rs512 : public rsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			rs512(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -685,8 +854,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * ES256 algorithm
+		 */
 		struct es256 : public ecdsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key ECDSA public key in PEM format
+			 * \param private_key ECDSA private key or empty string if not available. If empty, signing will always
+			 * fail. \param public_key_password Password to decrypt public key pem. \param privat_key_password Password
+			 * to decrypt private key pem.
+			 */
 			es256(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -695,8 +874,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * ES384 algorithm
+		 */
 		struct es384 : public ecdsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key ECDSA public key in PEM format
+			 * \param private_key ECDSA private key or empty string if not available. If empty, signing will always
+			 * fail. \param public_key_password Password to decrypt public key pem. \param privat_key_password Password
+			 * to decrypt private key pem.
+			 */
 			es384(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -705,8 +894,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * ES512 algorithm
+		 */
 		struct es512 : public ecdsa
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key ECDSA public key in PEM format
+			 * \param private_key ECDSA private key or empty string if not available. If empty, signing will always
+			 * fail. \param public_key_password Password to decrypt public key pem. \param privat_key_password Password
+			 * to decrypt private key pem.
+			 */
 			es512(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -716,8 +915,18 @@ namespace jwt
 			}
 		};
 
+		/**
+		 * PS256 algorithm
+		 */
 		struct ps256 : public pss
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			ps256(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -726,8 +935,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * PS384 algorithm
+		 */
 		struct ps384 : public pss
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			ps384(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -736,8 +955,18 @@ namespace jwt
 			{
 			}
 		};
+		/**
+		 * PS512 algorithm
+		 */
 		struct ps512 : public pss
 		{
+			/**
+			 * Construct new instance of algorithm
+			 * \param public_key RSA public key in PEM format
+			 * \param private_key RSA private key or empty string if not available. If empty, signing will always fail.
+			 * \param public_key_password Password to decrypt public key pem.
+			 * \param privat_key_password Password to decrypt private key pem.
+			 */
 			ps512(const std::string& public_key,
 			      const std::string& private_key = "",
 			      const std::string& public_key_password = "",
@@ -748,6 +977,9 @@ namespace jwt
 		};
 	} // namespace algorithm
 
+	/**
+	 * Convenience wrapper for JSON value
+	 */
 	class claim
 	{
 		picojson::value val;
@@ -768,15 +1000,33 @@ namespace jwt
 		    : val()
 		{
 		}
+#if JWT_CLAIM_EXPLICIT
+		explicit claim(std::string s)
+		    : val(std::move(s))
+		{
+		}
+		explicit claim(const date& s)
+		    : val(int64_t(std::chrono::system_clock::to_time_t(s)))
+		{
+		}
+		explicit claim(const std::set<std::string>& s)
+		    : val(picojson::array(s.cbegin(), s.cend()))
+		{
+		}
+		explicit claim(const picojson::value& val)
+		    : val(val)
+		{
+		}
+#else
 		claim(std::string s)
 		    : val(std::move(s))
 		{
 		}
-		claim(date s)
+		claim(const date& s)
 		    : val(int64_t(std::chrono::system_clock::to_time_t(s)))
 		{
 		}
-		claim(std::set<std::string> s)
+		claim(const std::set<std::string>& s)
 		    : val(picojson::array(s.cbegin(), s.cend()))
 		{
 		}
@@ -784,12 +1034,21 @@ namespace jwt
 		    : val(val)
 		{
 		}
+#endif
 
+		/**
+		 * Get wrapped json object
+		 * \return Wrapped json object
+		 */
 		picojson::value to_json() const
 		{
 			return val;
 		}
 
+		/**
+		 * Get type of contained object
+		 * \return Type
+		 */
 		result_t<type> get_type() const
 		{
 			if (val.is<picojson::null>())
@@ -810,12 +1069,20 @@ namespace jwt
 				return {type::null, JwtErrc::InternalError};
 		}
 
+		/**
+		 * Get the contained object as a string
+		 * \return content as string
+		 */
 		result_t<const std::string&> as_string() const
 		{
 			if (!val.is<std::string>())
 				return {"", JwtErrc::BadCastError};
 			return {val.get<std::string>(), JwtErrc::NoError};
 		}
+		/**
+		 * Get the contained object as a date
+		 * \return content as date
+		 */
 		result_t<const date> as_date() const
 		{
 			auto i = as_int();
@@ -825,12 +1092,20 @@ namespace jwt
 			}
 			return {std::chrono::system_clock::from_time_t(i.first), JwtErrc::NoError};
 		}
+		/**
+		 * Get the contained object as an array
+		 * \return content as array
+		 */
 		result_t<const picojson::array&> as_array() const
 		{
 			if (!val.is<picojson::array>())
 				return {picojson::array(), JwtErrc::BadCastError};
 			return {val.get<picojson::array>(), JwtErrc::NoError};
 		}
+		/**
+		 * Get the contained object as a set of strings
+		 * \return content as set of strings
+		 */
 		result_t<const std::set<std::string>> as_set() const
 		{
 			result_t<std::set<std::string>> res;
@@ -841,9 +1116,17 @@ namespace jwt
 				return res;
 			}
 			for (auto& e : array_res.first)
+			{
+				if (!e.is<std::string>())
+					return {res.first, JwtErrc::BadCastError};
 				res.first.insert(e.get<std::string>());
+			}
 			return res;
 		}
+		/**
+		 * Get the contained object as an integer
+		 * \return content as int
+		 */
 		result_t<int64_t> as_int() const
 		{
 			result_t<int64_t> res;
@@ -851,11 +1134,25 @@ namespace jwt
 				return {0, JwtErrc::BadCastError};
 			return {val.get<int64_t>(), JwtErrc::NoError};
 		}
+		/**
+		 * Get the contained object as a bool
+		 * \return content as bool
+		 */
 		result_t<bool> as_bool() const
 		{
 			if (!val.is<bool>())
 				return {false, JwtErrc::BadCastError};
 			return {val.get<bool>(), JwtErrc::NoError};
+		}
+		/**
+		 * Get the contained object as a number
+		 * \return content as double
+		 */
+		result_t<double> as_number() const
+		{
+			if (!val.is<double>())
+				return {0.0, JwtErrc::BadCastError};
+			return {val.get<double>(), JwtErrc::NoError};
 		}
 		result_t<const picojson::object&> as_object() const
 		{
@@ -865,40 +1162,76 @@ namespace jwt
 		}
 	};
 
+	/**
+	 * Base class that represents a token payload.
+	 * Contains Convenience accessors for common claims.
+	 */
 	class payload
 	{
 	protected:
 		std::unordered_map<std::string, claim> payload_claims;
 
 	public:
+		/**
+		 * Check if issuer is present ("iss")
+		 * \return true if present, false otherwise
+		 */
 		bool has_issuer() const noexcept
 		{
 			return has_payload_claim("iss");
 		}
+		/**
+		 * Check if subject is present ("sub")
+		 * \return true if present, false otherwise
+		 */
 		bool has_subject() const noexcept
 		{
 			return has_payload_claim("sub");
 		}
+		/**
+		 * Check if audience is present ("aud")
+		 * \return true if present, false otherwise
+		 */
 		bool has_audience() const noexcept
 		{
 			return has_payload_claim("aud");
 		}
+		/**
+		 * Check if expires is present ("exp")
+		 * \return true if present, false otherwise
+		 */
 		bool has_expires_at() const noexcept
 		{
 			return has_payload_claim("exp");
 		}
+		/**
+		 * Check if not before is present ("nbf")
+		 * \return true if present, false otherwise
+		 */
 		bool has_not_before() const noexcept
 		{
 			return has_payload_claim("nbf");
 		}
+		/**
+		 * Check if issued at is present ("iat")
+		 * \return true if present, false otherwise
+		 */
 		bool has_issued_at() const noexcept
 		{
 			return has_payload_claim("iat");
 		}
+		/**
+		 * Check if token id is present ("jti")
+		 * \return true if present, false otherwise
+		 */
 		bool has_id() const noexcept
 		{
 			return has_payload_claim("jti");
 		}
+		/**
+		 * Get issuer claim
+		 * \return issuer as string
+		 */
 		result_t<const std::string&> get_issuer() const
 		{
 			auto claim = get_payload_claim("iss");
@@ -913,6 +1246,10 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get subject claim
+		 * \return subject as string
+		 */
 		result_t<const std::string&> get_subject() const
 		{
 			auto claim = get_payload_claim("sub");
@@ -927,6 +1264,10 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get audience claim
+		 * \return audience as a set of strings
+		 */
 		result_t<std::set<std::string>> get_audience() const
 		{
 			auto claim = get_payload_claim("aud");
@@ -941,6 +1282,10 @@ namespace jwt
 			}
 			return {to_set.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get expires claim
+		 * \return expires as a date in utc
+		 */
 		result_t<const date> get_expires_at() const
 		{
 			auto claim = get_payload_claim("exp");
@@ -955,6 +1300,10 @@ namespace jwt
 			}
 			return {to_date.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get not valid before claim
+		 * \return nbf date in utc
+		 */
 		result_t<const date> get_not_before() const
 		{
 			auto claim = get_payload_claim("nbf");
@@ -969,6 +1318,10 @@ namespace jwt
 			}
 			return {to_date.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get issued at claim
+		 * \return issued at as date in utc
+		 */
 		result_t<const date> get_issued_at() const
 		{
 			auto claim = get_payload_claim("iat");
@@ -983,6 +1336,10 @@ namespace jwt
 			}
 			return {to_date.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get id claim
+		 * \return id as string
+		 */
 		result_t<const std::string&> get_id() const
 		{
 			auto claim = get_payload_claim("jti");
@@ -997,44 +1354,80 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Check if a payload claim is present
+		 * \return true if claim was present, false otherwise
+		 */
 		bool has_payload_claim(const std::string& name) const noexcept
 		{
 			return payload_claims.count(name) != 0;
 		}
+		/**
+		 * Get payload claim
+		 * \return Requested claim
+		 */
 		result_t<const claim&> get_payload_claim(const std::string& name) const
 		{
 			if (!has_payload_claim(name))
 				return {claim(), JwtErrc::ClaimNotFound};
 			return {payload_claims.at(name), JwtErrc::NoError};
 		}
+		/**
+		 * Get all payload claims
+		 * \return map of claims
+		 */
 		std::unordered_map<std::string, claim> get_payload_claims() const
 		{
 			return payload_claims;
 		}
 	};
 
+	/**
+	 * Base class that represents a token header.
+	 * Contains Convenience accessors for common claims.
+	 */
 	class header
 	{
 	protected:
 		std::unordered_map<std::string, claim> header_claims;
 
 	public:
+		/**
+		 * Check if algortihm is present ("alg")
+		 * \return true if present, false otherwise
+		 */
 		bool has_algorithm() const noexcept
 		{
 			return has_header_claim("alg");
 		}
+		/**
+		 * Check if type is present ("typ")
+		 * \return true if present, false otherwise
+		 */
 		bool has_type() const noexcept
 		{
 			return has_header_claim("typ");
 		}
+		/**
+		 * Check if content type is present ("cty")
+		 * \return true if present, false otherwise
+		 */
 		bool has_content_type() const noexcept
 		{
 			return has_header_claim("cty");
 		}
+		/**
+		 * Check if key id is present ("kid")
+		 * \return true if present, false otherwise
+		 */
 		bool has_key_id() const noexcept
 		{
 			return has_header_claim("kid");
 		}
+		/**
+		 * Get algorithm claim
+		 * \return algorithm as string
+		 */
 		result_t<const std::string&> get_algorithm() const
 		{
 			auto claim = get_header_claim("alg");
@@ -1049,6 +1442,10 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get type claim
+		 * \return type as a string
+		 */
 		result_t<const std::string&> get_type() const
 		{
 			auto claim = get_header_claim("typ");
@@ -1063,6 +1460,10 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get content type claim
+		 * \return content type as string
+		 */
 		result_t<const std::string&> get_content_type() const
 		{
 			auto claim = get_header_claim("cty");
@@ -1077,6 +1478,10 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Get key id claim
+		 * \return key id as string
+		 */
 		result_t<const std::string&> get_key_id() const
 		{
 			auto claim = get_header_claim("kid");
@@ -1091,36 +1496,64 @@ namespace jwt
 			}
 			return {to_string.first, JwtErrc::NoError};
 		}
+		/**
+		 * Check if a header claim is present
+		 * \return true if claim was present, false otherwise
+		 */
 		bool has_header_claim(const std::string& name) const noexcept
 		{
 			return header_claims.count(name) != 0;
 		}
+		/**
+		 * Get header claim
+		 * \return Requested claim
+		 */
 		result_t<const claim&> get_header_claim(const std::string& name) const
 		{
 			if (!has_header_claim(name))
 				return {claim(), JwtErrc::ClaimNotFound};
 			return {header_claims.at(name), JwtErrc::NoError};
 		}
+		/**
+		 * Get all header claims
+		 * \return map of claims
+		 */
 		std::unordered_map<std::string, claim> get_header_claims() const
 		{
 			return header_claims;
 		}
 	};
 
+	/**
+	 * Class containing all information about a decoded token
+	 */
 	class decoded_jwt : public header, public payload
 	{
 	protected:
-		std::string token;
+		/// Unmodifed token, as passed to constructor
+		const std::string token;
+		/// Header part decoded from base64
 		std::string header;
+		/// Unmodified header part in base64
 		std::string header_base64;
+		/// Payload part decoded from base64
 		std::string payload;
+		/// Unmodified payload part in base64
 		std::string payload_base64;
+		/// Signature part decoded from base64
 		std::string signature;
+		/// Unmodified signature part in base64
 		std::string signature_base64;
+		/// Error code
 		JwtErrc construct_error_code;
 
 	public:
-		decoded_jwt(const std::string& token, bool decode_signature)
+		/**
+		 * Constructor
+		 * Parses a given token
+		 * \param token The token to parse
+		 */
+		explicit decoded_jwt(const std::string& token)
 		    : token(token)
 		    , construct_error_code(JwtErrc::NoError)
 		{
@@ -1135,7 +1568,7 @@ namespace jwt
 				}
 
 				auto payload_end = token.find('.', hdr_end + 1);
-				if (hdr_end == std::string::npos)
+				if (payload_end == std::string::npos)
 				{
 					assert(0);
 					construct_error_code = JwtErrc::TokenInvalidSuppliedError;
@@ -1144,11 +1577,7 @@ namespace jwt
 
 				header = header_base64 = token.substr(0, hdr_end);
 				payload = payload_base64 = token.substr(hdr_end + 1, payload_end - hdr_end - 1);
-				signature = "";
-				if (decode_signature)
-				{
-					signature = signature_base64 = token.substr(payload_end + 1);
-				}
+				signature = signature_base64 = token.substr(payload_end + 1);
 
 				// Fix padding: JWT requires padding to get removed
 				auto fix_padding = [](std::string& str) {
@@ -1156,10 +1585,25 @@ namespace jwt
 					{
 						case 1:
 							str += alphabet::base64url::fill();
+#ifdef __cpp_attributes
+#if __has_cpp_attribute(fallthrough)
+							[[fallthrough]];
+#endif
+#endif
 						case 2:
 							str += alphabet::base64url::fill();
+#ifdef __cpp_attributes
+#if __has_cpp_attribute(fallthrough)
+							[[fallthrough]];
+#endif
+#endif
 						case 3:
 							str += alphabet::base64url::fill();
+#ifdef __cpp_attributes
+#if __has_cpp_attribute(fallthrough)
+							[[fallthrough]];
+#endif
+#endif
 						default:
 							break;
 					}
@@ -1167,10 +1611,7 @@ namespace jwt
 
 				fix_padding(header);
 				fix_padding(payload);
-				if (decode_signature)
-				{
-					fix_padding(signature);
-				}
+				fix_padding(signature);
 
 				result_t<std::string> decoded;
 				decoded = base::decode<alphabet::base64url>(header);
@@ -1191,17 +1632,14 @@ namespace jwt
 				}
 				payload = decoded.first;
 
-				if (decode_signature)
+				decoded = base::decode<alphabet::base64url>(signature);
+				if (decoded.second != JwtErrc::NoError)
 				{
-					decoded = base::decode<alphabet::base64url>(signature);
-					if (decoded.second != JwtErrc::NoError)
-					{
-						assert(0);
-						construct_error_code = JwtErrc::DecodeError;
-						break;
-					}
-					signature = decoded.first;
+					assert(0);
+					construct_error_code = JwtErrc::DecodeError;
+					break;
 				}
+				signature = decoded.first;
 
 				auto parse_claims = [](const std::string& str) -> result_t<std::unordered_map<std::string, claim>> {
 					result_t<std::unordered_map<std::string, claim>> res;
@@ -1214,7 +1652,7 @@ namespace jwt
 
 					for (auto& e : val.get<picojson::object>())
 					{
-						res.first.insert({e.first, e.second});
+						res.first.insert({e.first, claim(e.second)});
 					}
 
 					return res;
@@ -1239,31 +1677,58 @@ namespace jwt
 				payload_claims = parsed.first;
 			} while (0);
 		}
-
+		/**
+		 * Get token string, as passed to constructor
+		 * \return token as passed to constructor
+		 */
 		const std::string& get_token() const
 		{
 			return token;
 		}
+		/**
+		 * Get header part as json string
+		 * \return header part after base64 decoding
+		 */
 		const std::string& get_header() const
 		{
 			return header;
 		}
+		/**
+		 * Get payload part as json string
+		 * \return payload part after base64 decoding
+		 */
 		const std::string& get_payload() const
 		{
 			return payload;
 		}
+		/**
+		 * Get signature part as json string
+		 * \return signature part after base64 decoding
+		 */
 		const std::string& get_signature() const
 		{
 			return signature;
 		}
+		/**
+		 * Get header part as base64 string
+		 * \return header part before base64 decoding
+		 */
 		const std::string& get_header_base64() const
 		{
 			return header_base64;
 		}
+		/**
+		 * Get payload part as base64 string
+		 * \return payload part before base64 decoding
+		 */
 		const std::string& get_payload_base64() const
 		{
 			return payload_base64;
 		}
+		/**
+		 * Get signature part as base64 string
+		 * \return signature part before base64 decoding
+		 */
 		const std::string& get_signature_base64() const
 		{
 			return signature_base64;
@@ -1273,7 +1738,10 @@ namespace jwt
 			return construct_error_code;
 		}
 	};
-
+	/**
+	 * Builder class to build and sign a new token
+	 * Use jwt::create() to get an instance of this class.
+	 */
 	class builder
 	{
 		std::unordered_map<std::string, claim> header_claims;
@@ -1283,61 +1751,134 @@ namespace jwt
 		friend builder create();
 
 	public:
+		/**
+		 * Set a header claim.
+		 * \param id Name of the claim
+		 * \param c Claim to add
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_header_claim(const std::string& id, claim c)
 		{
-			header_claims[id] = c;
+			header_claims[id] = std::move(c);
 			return *this;
 		}
+		/**
+		 * Set a payload claim.
+		 * \param id Name of the claim
+		 * \param c Claim to add
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_payload_claim(const std::string& id, claim c)
 		{
-			payload_claims[id] = c;
+			payload_claims[id] = std::move(c);
 			return *this;
 		}
+		/**
+		 * Set algorithm claim
+		 * You normally don't need to do this, as the algorithm is automatically set if you don't change it.
+		 * \param str Name of algorithm
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_algorithm(const std::string& str)
 		{
-			return set_header_claim("alg", str);
+			return set_header_claim("alg", claim(str));
 		}
+		/**
+		 * Set type claim
+		 * \param str Type to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_type(const std::string& str)
 		{
-			return set_header_claim("typ", str);
+			return set_header_claim("typ", claim(str));
 		}
+		/**
+		 * Set content type claim
+		 * \param str Type to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_content_type(const std::string& str)
 		{
-			return set_header_claim("cty", str);
+			return set_header_claim("cty", claim(str));
 		}
+		/**
+		 * Set key id claim
+		 * \param str Key id to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_key_id(const std::string& str)
 		{
-			return set_header_claim("kid", str);
+			return set_header_claim("kid", claim(str));
 		}
+		/**
+		 * Set issuer claim
+		 * \param str Issuer to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_issuer(const std::string& str)
 		{
-			return set_payload_claim("iss", str);
+			return set_payload_claim("iss", claim(str));
 		}
+		/**
+		 * Set subject claim
+		 * \param str Subject to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_subject(const std::string& str)
 		{
-			return set_payload_claim("sub", str);
+			return set_payload_claim("sub", claim(str));
 		}
+		/**
+		 * Set audience claim
+		 * \param l Audience set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_audience(const std::set<std::string>& l)
 		{
-			return set_payload_claim("aud", l);
+			return set_payload_claim("aud", claim(l));
 		}
-		builder& set_expires_at(date d)
+		/**
+		 * Set expires at claim
+		 * \param d Expires time
+		 * \return *this to allow for method chaining
+		 */
+		builder& set_expires_at(const date& d)
 		{
-			return set_payload_claim("exp", d);
+			return set_payload_claim("exp", claim(d));
 		}
-		builder& set_not_before(date d)
+		/**
+		 * Set not before claim
+		 * \param d First valid time
+		 * \return *this to allow for method chaining
+		 */
+		builder& set_not_before(const date& d)
 		{
-			return set_payload_claim("nbf", d);
+			return set_payload_claim("nbf", claim(d));
 		}
-		builder& set_issued_at(date d)
+		/**
+		 * Set issued at claim
+		 * \param d Issued at time, should be current time
+		 * \return *this to allow for method chaining
+		 */
+		builder& set_issued_at(const date& d)
 		{
-			return set_payload_claim("iat", d);
+			return set_payload_claim("iat", claim(d));
 		}
+		/**
+		 * Set id claim
+		 * \param str ID to set
+		 * \return *this to allow for method chaining
+		 */
 		builder& set_id(const std::string& str)
 		{
-			return set_payload_claim("jti", str);
+			return set_payload_claim("jti", claim(str));
 		}
 
+		/**
+		 * Sign token and return result
+		 * \param algo Instance of an algorithm to sign the token with
+		 * \return Final token as a string
+		 */
 		template <typename T>
 		result_t<std::string> sign(const T& algo)
 		{
@@ -1394,77 +1935,148 @@ namespace jwt
 		}
 	};
 
+	/**
+	 * Verifier class used to check if a decoded token contains all claims required by your application and has a valid
+	 * signature.
+	 */
 	template <typename Clock>
 	class verifier
 	{
 		struct algo_base
 		{
+			virtual ~algo_base() = default;
 			virtual JwtErrc verify(const std::string& data, const std::string& sig) = 0;
 		};
 		template <typename T>
 		struct algo : public algo_base
 		{
 			T alg;
-			algo(T a)
+			explicit algo(T a)
 			    : alg(a)
 			{
 			}
-			virtual JwtErrc verify(const std::string& data, const std::string& sig)
+			virtual JwtErrc verify(const std::string& data, const std::string& sig) override
 			{
 				return alg.verify(data, sig);
 			}
 		};
 
+		/// Required claims
 		std::unordered_map<std::string, claim> claims;
+		/// Leeway time for exp, nbf and iat
 		size_t default_leeway = 0;
+		/// Instance of clock type
 		Clock clock;
+		/// Supported algorithms
 		std::unordered_map<std::string, std::shared_ptr<algo_base>> algs;
 
 	public:
-		verifier(Clock c)
+		/**
+		 * Constructor for building a new verifier instance
+		 * \param c Clock instance
+		 */
+		explicit verifier(Clock c)
 		    : clock(c)
 		{
 		}
 
+		/**
+		 * Set default leeway to use.
+		 * \param leeway Default leeway to use if not specified otherwise
+		 * \return *this to allow chaining
+		 */
 		verifier& leeway(size_t leeway)
 		{
 			default_leeway = leeway;
 			return *this;
 		}
+		/**
+		 * Set leeway for expires at.
+		 * If not specified the default leeway will be used.
+		 * \param leeway Set leeway to use for expires at.
+		 * \return *this to allow chaining
+		 */
 		verifier& expires_at_leeway(size_t leeway)
 		{
-			return with_claim("exp", std::chrono::system_clock::from_time_t(leeway));
+			return with_claim("exp", claim(std::chrono::system_clock::from_time_t(leeway)));
 		}
+		/**
+		 * Set leeway for not before.
+		 * If not specified the default leeway will be used.
+		 * \param leeway Set leeway to use for not before.
+		 * \return *this to allow chaining
+		 */
 		verifier& not_before_leeway(size_t leeway)
 		{
-			return with_claim("nbf", std::chrono::system_clock::from_time_t(leeway));
+			return with_claim("nbf", claim(std::chrono::system_clock::from_time_t(leeway)));
 		}
+		/**
+		 * Set leeway for issued at.
+		 * If not specified the default leeway will be used.
+		 * \param leeway Set leeway to use for issued at.
+		 * \return *this to allow chaining
+		 */
 		verifier& issued_at_leeway(size_t leeway)
 		{
-			return with_claim("iat", std::chrono::system_clock::from_time_t(leeway));
+			return with_claim("iat", claim(std::chrono::system_clock::from_time_t(leeway)));
 		}
+		/**
+		 * Set an issuer to check for.
+		 * Check is casesensitive.
+		 * \param iss Issuer to check for.
+		 * \return *this to allow chaining
+		 */
 		verifier& with_issuer(const std::string& iss)
 		{
-			return with_claim("iss", iss);
+			return with_claim("iss", claim(iss));
 		}
+		/**
+		 * Set a subject to check for.
+		 * Check is casesensitive.
+		 * \param sub Subject to check for.
+		 * \return *this to allow chaining
+		 */
 		verifier& with_subject(const std::string& sub)
 		{
-			return with_claim("sub", sub);
+			return with_claim("sub", claim(sub));
 		}
+		/**
+		 * Set an audience to check for.
+		 * If any of the specified audiences is not present in the token the check fails.
+		 * \param aud Audience to check for.
+		 * \return *this to allow chaining
+		 */
 		verifier& with_audience(const std::set<std::string>& aud)
 		{
-			return with_claim("aud", aud);
+			return with_claim("aud", claim(aud));
 		}
+		/**
+		 * Set an id to check for.
+		 * Check is casesensitive.
+		 * \param id ID to check for.
+		 * \return *this to allow chaining
+		 */
 		verifier& with_id(const std::string& id)
 		{
-			return with_claim("jti", id);
+			return with_claim("jti", claim(id));
 		}
+		/**
+		 * Specify a claim to check for.
+		 * \param name Name of the claim to check for
+		 * \param c Claim to check for
+		 * \return *this to allow chaining
+		 */
 		verifier& with_claim(const std::string& name, claim c)
 		{
 			claims[name] = c;
 			return *this;
 		}
 
+		/**
+		 * Add an algorithm available for checking.
+		 * \param alg Algorithm to allow
+		 * \return *this to allow chaining
+		 */
 		template <typename Algorithm>
 		verifier& allow_algorithm(Algorithm alg)
 		{
@@ -1472,6 +2084,10 @@ namespace jwt
 			return *this;
 		}
 
+		/**
+		 * Verify the given token.
+		 * \param jwt Token to check
+		 */
 		JwtErrc verify(const decoded_jwt& jwt) const
 		{
 			const std::string data = jwt.get_header_base64() + "." + jwt.get_payload_base64();
@@ -1549,9 +2165,8 @@ namespace jwt
 				result_t<const date> the_date = claims.at("exp").as_date();
 				if (the_date.second != JwtErrc::NoError)
 					return the_date.second;
-				auto leeway = claims.count("exp") == 1
-				                  ? std::chrono::system_clock::to_time_t(the_date.first)
-				                  : default_leeway;
+				auto leeway =
+				    claims.count("exp") == 1 ? std::chrono::system_clock::to_time_t(the_date.first) : default_leeway;
 				auto exp = jwt.get_expires_at();
 				if (exp.second != JwtErrc::NoError)
 					return exp.second;
@@ -1563,9 +2178,8 @@ namespace jwt
 				result_t<const date> the_date = claims.at("iat").as_date();
 				if (the_date.second != JwtErrc::NoError)
 					return the_date.second;
-				auto leeway = claims.count("iat") == 1
-				                  ? std::chrono::system_clock::to_time_t(the_date.first)
-				                  : default_leeway;
+				auto leeway =
+				    claims.count("iat") == 1 ? std::chrono::system_clock::to_time_t(the_date.first) : default_leeway;
 				auto iat = jwt.get_issued_at();
 				if (iat.second != JwtErrc::NoError)
 					return iat.second;
@@ -1577,9 +2191,8 @@ namespace jwt
 				result_t<const date> the_date = claims.at("nbf").as_date();
 				if (the_date.second != JwtErrc::NoError)
 					return the_date.second;
-				auto leeway = claims.count("nbf") == 1
-				                  ? std::chrono::system_clock::to_time_t(the_date.first)
-				                  : default_leeway;
+				auto leeway =
+				    claims.count("nbf") == 1 ? std::chrono::system_clock::to_time_t(the_date.first) : default_leeway;
 				auto nbf = jwt.get_not_before();
 				if (nbf.second != JwtErrc::NoError)
 					return nbf.second;
@@ -1616,12 +2229,20 @@ namespace jwt
 		}
 	};
 
+	/**
+	 * Create a verifier using the given clock
+	 * \param c Clock instance to use
+	 * \return verifier instance
+	 */
 	template <typename Clock>
 	verifier<Clock> verify(Clock c)
 	{
 		return verifier<Clock>(c);
 	}
 
+	/**
+	 * Default clock class using std::chrono::system_clock as a backend.
+	 */
 	struct default_clock
 	{
 		std::chrono::system_clock::time_point now() const
@@ -1630,18 +2251,30 @@ namespace jwt
 		}
 	};
 
+	/**
+	 * Create a verifier using the default clock
+	 * \return verifier instance
+	 */
 	inline verifier<default_clock> verify()
 	{
 		return verify<default_clock>({});
 	}
 
+	/**
+	 * Return a builder instance to create a new token
+	 */
 	inline builder create()
 	{
 		return builder();
 	}
 
-	inline decoded_jwt decode(const std::string& token, bool decode_signature)
+	/**
+	 * Decode a token
+	 * \param token Token to decode
+	 * \return Decoded token
+	 */
+	inline decoded_jwt decode(const std::string& token)
 	{
-		return decoded_jwt(token, decode_signature);
+		return decoded_jwt(token);
 	}
 } // namespace jwt
